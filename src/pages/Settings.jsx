@@ -7,8 +7,6 @@ import {
   SlidersHorizontal,
   Camera,
   Smartphone,
-  Mail,
-  Globe,
 } from "lucide-react";
 
 // ---------- small building blocks ----------

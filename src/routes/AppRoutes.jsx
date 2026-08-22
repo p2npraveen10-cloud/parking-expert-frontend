@@ -1,5 +1,5 @@
-import React, { Suspense, lazy } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Suspense, lazy } from "react";
+import { Routes, Route } from "react-router-dom";
 
 import ProtectedRoute from "../PageLoader/ProtectedRoute";
 import PublicRoute from "../PageLoader/PublicRoute";
