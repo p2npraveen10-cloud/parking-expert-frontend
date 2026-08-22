@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { Box, Container, Typography } from "@mui/material";
-import { motion, useScroll, useTransform, useMotionValue } from "framer-motion";
+import { motion, useMotionValue } from "framer-motion";
 import {
   TbUsers,
   TbMapPin,
@@ -728,8 +728,8 @@ function MobileStack() {
 
 export default function Stats() {
   const headingRef = useRef(null);
-  const { scrollYProgress } = useScroll({ target: headingRef, offset: ["start end", "end start"] });
-  const underlineScale = useTransform(scrollYProgress, [0, 0.4], [0, 1]);
+  // const { scrollYProgress } = useScroll({ target: headingRef, offset: ["start end", "end start"] });
+  // const underlineScale = useTransform(scrollYProgress, [0, 0.4], [0, 1]);
 
   return (
     <Box
