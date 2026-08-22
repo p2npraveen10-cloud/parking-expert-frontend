@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { Box, Container, Typography, Card, Stack, Avatar, Divider } from "@mui/material";
 import { motion, useMotionValue, useSpring, useTransform, useReducedMotion } from "framer-motion";
 import { TbStarFilled, TbQuote } from "react-icons/tb";

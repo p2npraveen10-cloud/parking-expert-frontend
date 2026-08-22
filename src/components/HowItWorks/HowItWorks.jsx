@@ -112,7 +112,6 @@ function StepIcon({ type, size = 30 }) {
 /* ---------------- Glass card with 3D tilt ---------------- */
 
 function StepCard({ step, index }) {
-  const Icon = step.icon;
   const rotateX = useMotionValue(0);
   const rotateY = useMotionValue(0);
 

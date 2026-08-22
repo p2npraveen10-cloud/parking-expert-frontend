@@ -1,5 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
-import { Avatar } from "primereact/avatar";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -14,7 +13,6 @@ import {
   X,
 } from "lucide-react";
 
-// Adjust this to match your actual backend base URL / API client setup
 const API_BASE_URL =
   process.env.REACT_APP_API_BASE_URL || "http://localhost:8080/api";
 
