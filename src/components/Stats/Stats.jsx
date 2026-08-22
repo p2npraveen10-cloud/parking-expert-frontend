@@ -728,8 +728,6 @@ function MobileStack() {
 
 export default function Stats() {
   const headingRef = useRef(null);
-  // const { scrollYProgress } = useScroll({ target: headingRef, offset: ["start end", "end start"] });
-  // const underlineScale = useTransform(scrollYProgress, [0, 0.4], [0, 1]);
 
   return (
     <Box
