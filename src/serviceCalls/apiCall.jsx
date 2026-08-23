@@ -195,4 +195,18 @@ export const toggleReportScheduleEnabled = (id, enabled) =>
     withCredentials: true,
   });
  
+ export const getDailyReport = (date) =>
+  api.get("report/daily", { params: date ?{ date }:{} });
+
+export const getRangeReport = (from, to, includeDetails) =>
+  api.get("report/range", { params: { from, to, includeDetails } });
+
+export const deleteCompanyAttachment = (id) =>
+  api.delete(`/company/attachments/${id}`);
+
+export const uploadCompanyAttachment = (formData, params) =>
+  api.post(`/company/attachments/upload`, formData, {
+    params, 
+    headers: { "Content-Type": "multipart/form-data" },
+  });
   

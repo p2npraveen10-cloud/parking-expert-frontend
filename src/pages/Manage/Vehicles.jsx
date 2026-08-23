@@ -194,8 +194,9 @@ const VehicleDetailModal = ({ open, tokenIdOrVehicleNo, onClose, toast }) => {
                   {data.vehicleNumber || "—"}
                 </p>
                 <p className="mt-1.5 truncate text-[12px] font-medium text-white/75">
-                  {data.vehicleName || "Vehicle"} &middot; {data.vehicleType?.vehicleDescription || "—"}
+                  {data.vehicleName || "Vehicle"} &middot; {data.vehicleType?.vehicleType || "—"}
                 </p>
+
               </div>
             </div>
           </div>
@@ -581,7 +582,7 @@ const VehicleTicket = ({ v, delay = 0, onView, onEdit, onDelete }) => (
           {v.vehicleNumber || "—"}
         </p>
         <p className="truncate text-[11px]" style={{ color: TOKENS.inkSoft }}>
-          {v.vehicleName} &middot; {v.vehicleType?.vehicleDescription || "—"}
+          {v.vehicleName} &middot; {v.vehicleType?.vehicleType || "—"}
         </p>
       </div>
     </div>
@@ -788,6 +789,7 @@ const VehiclesTab = () => {
   const [viewTarget, setViewTarget] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [vehicleTypes, setVehicleTypes] = useState([]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -838,6 +840,20 @@ const VehiclesTab = () => {
   useEffect(() => {
     loadVehicles();
   }, [loadVehicles]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await getVehicleTypes();
+        if (!cancelled) setVehicleTypes(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to load vehicle types:", err);
+        if (!cancelled) setVehicleTypes([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleRefresh = () => loadVehicles({ silent: true });
 
@@ -898,6 +914,7 @@ const VehiclesTab = () => {
   const activeCount = vehicles.filter((v) => v.status === "ACTIVE").length;
   const busy = loading || refreshing;
 
+
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -924,8 +941,7 @@ const VehiclesTab = () => {
               {[
                 { value: "", label: "All" },
                 { value: "ACTIVE", label: "Active" },
-                { value: "COMPLETED", label: "Exited" },
-                { value: "CANCELLED", label: "Cancelled" },
+                { value: "EXIT", label: "Exited" },
               ].map((o) => {
                 const active = statusFilter === o.value;
                 return (
@@ -997,8 +1013,12 @@ const VehiclesTab = () => {
                 width={140}
                 options={[
                   { value: "", label: "All types" },
-                  { value: "CAR", label: "Car" },
-                  { value: "BIKE", label: "Bike" },
+                  ...(vehicleTypes.length > 0
+                    ? vehicleTypes.map((t) => ({
+                      value: t.vehicleType || String(t.id),
+                      label: t.vehicleType || `Type ${t.id}`,
+                    }))
+                    : [{ value: "", label: "Loading…" }]),
                 ]}
               />
             </label>

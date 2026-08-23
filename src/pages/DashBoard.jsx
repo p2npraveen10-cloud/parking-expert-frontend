@@ -36,51 +36,44 @@ import {
   getReportSchedule,
 } from "../serviceCalls/apiCall";
 
-
 import { StatusPill, formatDateTime } from "../components/shared";
 
-
-const MOCK_SUMMARY = {
-  vehiclesParked: 37,
-  todayRevenue: 2450.0,
-  monthRevenue: 87500.5,
-  totalRevenue: 412300.0,
-  todayEntries: 52,
-  todayExits: 41,
-  totalVehicles: 1280,
-  occupancyByType: [
-    { type: "Car", todayCount: 28, monthCount: 620, totalCount: 3100 },
-    { type: "Bike", todayCount: 13, monthCount: 410, totalCount: 1850 },
-    { type: "Truck", todayCount: 0, monthCount: 45, totalCount: 210 },
-  ],
-};
-
-// 7-day trend used for sparklines + the two headline charts.
-// "Today" mirrors the live figures above so the charts stay consistent
-// with the KPI cards.
-const MOCK_TREND = [
-  { day: "Mon", revenue: 61200, entries: 58, exits: 49, parked: 22 },
-  { day: "Tue", revenue: 58900, entries: 55, exits: 52, parked: 26 },
-  { day: "Wed", revenue: 73400, entries: 66, exits: 60, parked: 31 },
-  { day: "Thu", revenue: 69800, entries: 60, exits: 57, parked: 29 },
-  { day: "Fri", revenue: 81200, entries: 72, exits: 65, parked: 34 },
-  { day: "Sat", revenue: 92500, entries: 80, exits: 74, parked: 40 },
-  { day: "Today", revenue: 2450, entries: 52, exits: 41, parked: 37 },
-];
-
-const MOCK_SCHEDULE = {
-  frequency: "DAILY",
-  hourOfDay: 9,
-  minuteOfHour: 0,
-  recipientEmail: "reports@yourcompany.com",
-  enabled: true,
-  timeZone: "Asia/Kolkata",
-  cronExpression: "0 0 9 * * ?",
-  updatedAt: "2026-08-15T12:30:00",
+const EMPTY_SUMMARY = {
+  vehiclesParked: 0,
+  todayRevenue: 0,
+  monthRevenue: 0,
+  totalRevenue: 0,
+  todayEntries: 0,
+  todayExits: 0,
+  totalVehicles: 0,
+  occupancyByType: [],
 };
 
 const OCCUPANCY_ICONS = { Car: CarFront, Bike: Bike, Truck: Truck };
 const TYPE_COLORS = { Car: "#2563EB", Bike: "#0EA5A0", Truck: "#F59E0B" };
+const COLOR_PALETTE = [
+  "#2563EB",
+  "#0EA5A0",
+  "#F59E0B",
+  "#7C3AED",
+  "#DB2777",
+  "#059669",
+  "#DC2626",
+  "#4F46E5",
+  "#0891B2",
+  "#CA8A04",
+];
+
+const getTypeColor = (type) => {
+  if (TYPE_COLORS[type]) return TYPE_COLORS[type];
+  let hash = 0;
+  for (let i = 0; i < type.length; i++) {
+    hash = type.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return COLOR_PALETTE[Math.abs(hash) % COLOR_PALETTE.length];
+};
+
+const getTypeIcon = (type) => OCCUPANCY_ICONS[type] || CarFront;
 
 /* ------------------------------------------------------------------ */
 /*  Formatters                                                         */
@@ -106,7 +99,7 @@ const useCountUp = (target, duration = 1100) => {
     const tick = (ts) => {
       if (start === null) start = ts;
       const progress = Math.min((ts - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
       setValue(target * eased);
       if (progress < 1) frame = requestAnimationFrame(tick);
     };
@@ -273,12 +266,13 @@ const MetricCard = ({
 };
 
 const OccupancyRow = ({ type, todayCount, percent }) => {
-  const Icon = OCCUPANCY_ICONS[type] || CarFront;
+  const Icon = getTypeIcon(type);
+  const color = getTypeColor(type);
   return (
     <div className="flex items-center gap-3">
       <div
         className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-        style={{ background: `${TYPE_COLORS[type]}1A`, color: TYPE_COLORS[type] }}
+        style={{ background: `${color}1A`, color }}
       >
         <Icon size={15} strokeWidth={2.2} />
       </div>
@@ -290,7 +284,7 @@ const OccupancyRow = ({ type, todayCount, percent }) => {
         <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
           <motion.div
             className="h-full rounded-full"
-            style={{ background: TYPE_COLORS[type] }}
+            style={{ background: color }}
             initial={{ width: 0 }}
             animate={{ width: `${percent}%` }}
             transition={{ duration: 0.8, ease: "easeOut" }}
@@ -322,21 +316,135 @@ const PremiumTooltip = ({ active, payload, label, money }) => {
   );
 };
 
+const ScheduleFilterTabs = ({ value, onChange, counts }) => {
+  const tabs = [
+    { key: "ALL", label: "All", value: counts.all },
+    { key: "ACTIVE", label: "Active", value: counts.active },
+    { key: "INACTIVE", label: "Inactive", value: counts.inactive },
+  ];
+  return (
+    <div className="flex items-center gap-2">
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          onClick={() => onChange(tab.key)}
+          className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-colors duration-150 ${
+            value === tab.key
+              ? "bg-indigo-600 text-white"
+              : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+          }`}
+        >
+          {tab.label} ({tab.value})
+        </button>
+      ))}
+    </div>
+  );
+};
+
+const ScheduleCard = ({ schedule }) => {
+  const scheduleTime = `${String(schedule.hourOfDay).padStart(2, "0")}:${String(
+    schedule.minuteOfHour
+  ).padStart(2, "0")}`;
+
+  const accent = schedule.enabled
+    ? {
+        bar: "linear-gradient(180deg, #10B981, #0EA5A0)",
+        badge: "linear-gradient(135deg, #10B981, #0EA5A0)",
+        ring: "rgba(16,185,129,0.14)",
+      }
+    : {
+        bar: "linear-gradient(180deg, #94A3B8, #64748B)",
+        badge: "linear-gradient(135deg, #94A3B8, #64748B)",
+        ring: "rgba(100,116,139,0.12)",
+      };
+
+  return (
+    <TiltCard
+      glow={accent.ring}
+      className="rounded-2xl border border-slate-200 bg-white shadow-sm hover:shadow-lg transition-shadow duration-300"
+    >
+      <div className="flex">
+        <div className="w-1 shrink-0 rounded-l-2xl" style={{ background: accent.bar }} />
+        <div className="flex-1 p-5">
+          <div className="flex items-start justify-between gap-3 mb-5">
+            <div className="flex items-center gap-3">
+              <div
+                className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-md"
+                style={{ background: accent.badge }}
+              >
+                <CalendarClock size={18} strokeWidth={2.2} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-800 capitalize leading-tight">
+                  {schedule.frequency ? schedule.frequency.toLowerCase() : "—"} report
+                </p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Runs at {scheduleTime}</p>
+              </div>
+            </div>
+            <StatusPill status={schedule.enabled ? "ENABLED" : "DISABLED"} />
+          </div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <CalendarClock size={16} strokeWidth={2.2} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">
+                  Frequency
+                </p>
+                <p className="text-sm font-semibold text-slate-700 capitalize truncate">
+                  {schedule.frequency ? schedule.frequency.toLowerCase() : "—"} · {scheduleTime}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+                <Mail size={16} strokeWidth={2.2} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">
+                  Recipient
+                </p>
+                <p className="text-sm font-semibold text-slate-700 break-all">
+                  {schedule.recipientEmail}
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold mb-1">
+                Time zone
+              </p>
+              <p className="text-sm font-semibold text-slate-700">{schedule.timeZone}</p>
+            </div>
+
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold mb-1">
+                Last updated
+              </p>
+              <p className="text-sm font-semibold text-slate-700">
+                {formatDateTime(schedule.updatedAt)}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </TiltCard>
+  );
+};
+
 /* ------------------------------------------------------------------ */
 /*  Dashboard                                                          */
 /* ------------------------------------------------------------------ */
 
 const Dashboard = () => {
-  // const [summary] = useState(MOCK_SUMMARY);
-  // const [trend] = useState(MOCK_TREND);
-  // const [schedule] = useState(MOCK_SCHEDULE);
-  // const [expandedType, setExpandedType] = useState(null);
-
-  const [summary, setSummary] = useState(MOCK_SUMMARY);
-  const [trend, setTrend] = useState(MOCK_TREND);
-  const [schedule, setSchedule] = useState(MOCK_SCHEDULE);
+  const [summary, setSummary] = useState(EMPTY_SUMMARY);
+  const [trend, setTrend] = useState([]);
+  const [schedules, setSchedules] = useState([]);
+  const [scheduleFilter, setScheduleFilter] = useState("ALL");
   const [expandedType, setExpandedType] = useState(null);
-
 
   useEffect(() => {
     let cancelled = false;
@@ -352,22 +460,6 @@ const Dashboard = () => {
 
         if (cancelled) return;
 
-        console.log("SUMMARY API:", summaryResponse);
-        console.log("TREND API:", trendResponse);
-        console.log("SCHEDULE API:", scheduleResponse);
-
-        // =========================================================
-        // SUMMARY
-        // API response:
-        // {
-        //   data: {
-        //     vehiclesParked: 4998,
-        //     todayRevenue: 0,
-        //     ...
-        //   }
-        // }
-        // =========================================================
-
         const summaryData = summaryResponse?.data;
 
         if (summaryData && typeof summaryData === "object") {
@@ -379,22 +471,11 @@ const Dashboard = () => {
             todayEntries: summaryData.todayEntries ?? 0,
             todayExits: summaryData.todayExits ?? 0,
             totalVehicles: summaryData.totalVehicles ?? 0,
-
-            occupancyByType: Array.isArray(
-              summaryData.occupancyByType
-            )
+            occupancyByType: Array.isArray(summaryData.occupancyByType)
               ? summaryData.occupancyByType
               : [],
           });
         }
-
-        // =========================================================
-        // TREND
-        // API response:
-        // {
-        //   data: [...]
-        // }
-        // =========================================================
 
         const trendData = trendResponse?.data;
 
@@ -402,38 +483,24 @@ const Dashboard = () => {
           setTrend(trendData);
         }
 
-        // =========================================================
-        // SCHEDULE
-        // API response:
-        // {
-        //   data: [...]
-        // }
-        // =========================================================
-
         const scheduleData = scheduleResponse?.data;
 
-        if (Array.isArray(scheduleData) && scheduleData.length > 0) {
-          const first = scheduleData[0];
-
-          setSchedule({
-            frequency: first.frequency ?? "DAILY",
-            hourOfDay: first.hourOfDay ?? 0,
-            minuteOfHour: first.minuteOfHour ?? 0,
-            recipientEmail: first.recipientEmail ?? "—",
-            enabled: Boolean(first.enabled),
-            timeZone: first.timeZone ?? "—",
-            cronExpression: first.cronExpression ?? "",
-            updatedAt: first.updatedAt ?? null,
-          });
+        if (Array.isArray(scheduleData)) {
+          setSchedules(
+            scheduleData.map((item) => ({
+              frequency: item.frequency ?? "DAILY",
+              hourOfDay: item.hourOfDay ?? 0,
+              minuteOfHour: item.minuteOfHour ?? 0,
+              recipientEmail: item.recipientEmail ?? "—",
+              enabled: Boolean(item.enabled),
+              timeZone: item.timeZone ?? "—",
+              cronExpression: item.cronExpression ?? "",
+              updatedAt: item.updatedAt ?? null,
+            }))
+          );
         }
       } catch (err) {
-        console.error(
-          "Dashboard data load failed:",
-          err
-        );
-
-        // API fail aana mattum mock data already state-la irukkum
-        // so nothing else needed.
+        console.error("Dashboard data load failed:", err);
       }
     };
 
@@ -444,23 +511,28 @@ const Dashboard = () => {
     };
   }, []);
 
-
   const maxOccupancy = Math.max(1, ...summary.occupancyByType.map((o) => o.todayCount));
   const totalFleet = summary.occupancyByType.reduce((s, o) => s + o.totalCount, 0);
-
-  const scheduleTime = `${String(schedule.hourOfDay).padStart(2, "0")}:${String(
-    schedule.minuteOfHour
-  ).padStart(2, "0")}`;
 
   const pieData = summary.occupancyByType.map((o) => ({
     name: o.type,
     value: o.todayCount,
   }));
 
-  return (
+  const scheduleCounts = {
+    all: schedules.length,
+    active: schedules.filter((s) => s.enabled).length,
+    inactive: schedules.filter((s) => !s.enabled).length,
+  };
 
+  const filteredSchedules = schedules.filter((s) => {
+    if (scheduleFilter === "ACTIVE") return s.enabled;
+    if (scheduleFilter === "INACTIVE") return !s.enabled;
+    return true;
+  });
+
+  return (
     <div className="w-full space-y-6">
-      
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
@@ -473,7 +545,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* KPI row 1 */}
       <motion.div
         variants={containerStagger}
         initial="hidden"
@@ -528,7 +599,6 @@ const Dashboard = () => {
         />
       </motion.div>
 
-      {/* KPI row 2 */}
       <motion.div
         variants={containerStagger}
         initial="hidden"
@@ -565,9 +635,7 @@ const Dashboard = () => {
         />
       </motion.div>
 
-      {/* Charts row */}
       <div className="grid lg:grid-cols-[340px_minmax(0,1fr)] gap-4 items-stretch">
-        {/* Donut: today's mix */}
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -592,7 +660,7 @@ const Dashboard = () => {
                   {pieData.map((entry) => (
                     <Cell
                       key={entry.name}
-                      fill={TYPE_COLORS[entry.name]}
+                      fill={getTypeColor(entry.name)}
                       stroke="white"
                       strokeWidth={2}
                     />
@@ -622,7 +690,6 @@ const Dashboard = () => {
           </div>
         </motion.div>
 
-        {/* Area: entries vs exits */}
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -692,7 +759,6 @@ const Dashboard = () => {
         </motion.div>
       </div>
 
-      {/* Revenue bar chart */}
       <motion.div
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
@@ -740,7 +806,6 @@ const Dashboard = () => {
         </div>
       </motion.div>
 
-      {/* Vehicle breakdown table with expandable detail rows */}
       <motion.div
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
@@ -765,9 +830,10 @@ const Dashboard = () => {
             </thead>
             <tbody>
               {summary.occupancyByType.map((row) => {
-                const Icon = OCCUPANCY_ICONS[row.type] || CarFront;
+                const Icon = getTypeIcon(row.type);
+                const color = getTypeColor(row.type);
                 const isOpen = expandedType === row.type;
-                const share = (row.totalCount / totalFleet) * 100;
+                const share = totalFleet ? (row.totalCount / totalFleet) * 100 : 0;
                 const avgPerDay = row.monthCount / 30;
                 return (
                   <React.Fragment key={row.type}>
@@ -782,8 +848,8 @@ const Dashboard = () => {
                           <div
                             className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                             style={{
-                              background: `${TYPE_COLORS[row.type]}1A`,
-                              color: TYPE_COLORS[row.type],
+                              background: `${color}1A`,
+                              color,
                             }}
                           >
                             <Icon size={14} strokeWidth={2.2} />
@@ -838,7 +904,7 @@ const Dashboard = () => {
                                     <div className="h-1.5 flex-1 rounded-full bg-slate-200 overflow-hidden">
                                       <motion.div
                                         className="h-full rounded-full"
-                                        style={{ background: TYPE_COLORS[row.type] }}
+                                        style={{ background: color }}
                                         initial={{ width: 0 }}
                                         animate={{ width: `${share}%` }}
                                         transition={{ duration: 0.6 }}
@@ -872,64 +938,31 @@ const Dashboard = () => {
         </div>
       </motion.div>
 
-      {/* Scheduled report */}
       <motion.div
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, delay: 0.3 }}
         className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
       >
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-bold text-slate-800">Scheduled report</p>
-          <StatusPill status={schedule.enabled ? "ENABLED" : "DISABLED"} />
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+          <p className="text-sm font-bold text-slate-800">Scheduled reports</p>
+          <ScheduleFilterTabs
+            value={scheduleFilter}
+            onChange={setScheduleFilter}
+            counts={scheduleCounts}
+          />
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-              <CalendarClock size={16} strokeWidth={2.2} />
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">
-                Frequency
-              </p>
-              <p className="text-sm font-semibold text-slate-700 capitalize">
-                {schedule.frequency.toLowerCase()} · {scheduleTime}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
-              <Mail size={16} strokeWidth={2.2} />
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold">
-                Recipient
-              </p>
-              <p className="text-sm font-semibold text-slate-700 break-all">
-                {schedule.recipientEmail}
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold mb-1">
-              Time zone
+        <div className="space-y-3">
+          {filteredSchedules.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-6">
+              No schedules found.
             </p>
-            <p className="text-sm font-semibold text-slate-700">
-              {schedule.timeZone}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-slate-400 font-semibold mb-1">
-              Last updated
-            </p>
-            <p className="text-sm font-semibold text-slate-700">
-              {formatDateTime(schedule.updatedAt)}
-            </p>
-          </div>
+          ) : (
+            filteredSchedules.map((schedule, index) => (
+              <ScheduleCard key={index} schedule={schedule} />
+            ))
+          )}
         </div>
       </motion.div>
     </div>

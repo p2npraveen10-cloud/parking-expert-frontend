@@ -41,13 +41,6 @@ const EMPTY_ENTRY = {
   contactNo: "",
 };
 
-// Normalizes a base64 QR string into a usable <img> src.
-// Handles both raw base64 and strings that already carry a data: prefix.
-const toQrSrc = (base64) => {
-  if (!base64) return null;
-  return base64.startsWith("data:") ? base64 : `data:image/png;base64,${base64}`;
-};
-
 const PlateBadge = ({ value, size = "md" }) => {
   const sizes = {
     sm: "text-xs px-2 py-1",
@@ -168,13 +161,12 @@ const QRPlaceholder = () => (
     ))}
   </div>
 );
-const QRImage = ({ base64, size = 64 }) => {
+const QRImage = ({ src, size = 64 }) => {
   const [failed, setFailed] = useState(false);
-  const src = toQrSrc(base64);
 
   useEffect(() => {
     setFailed(false);
-  }, [base64]);
+  }, [src]);
 
   if (!src || failed) return <QRPlaceholder />;
 
@@ -794,7 +786,7 @@ const QRDialog = ({ result, onClose }) => {
               style={{ transformStyle: "preserve-3d" }}
               className="mx-auto w-fit p-3.5 rounded-3xl bg-white shadow-[0_20px_40px_-12px_rgba(37,99,235,0.35)] border border-slate-100"
             >
-              <QRImage base64={result.qrCode} size={172} />
+              <QRImage src={result.qrCode} size={172} />
             </motion.div>
 
             <div className="text-center mt-4">
@@ -894,7 +886,7 @@ const ExitResultCard = ({ result, onCheckout, checkingOut }) => {
                 className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50/60 transition-colors"
               >
                 <div className="p-1 rounded-lg bg-white border border-slate-200 shrink-0">
-                  <QRImage base64={result.qrCode} size={38} />
+                  <QRImage src={result.qrCode} size={38} />
                 </div>
                 <div className="min-w-0 text-left">
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Token</p>

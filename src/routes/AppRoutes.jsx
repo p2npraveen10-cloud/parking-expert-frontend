@@ -10,6 +10,7 @@ import LandingPage from './../pages/LandingPage';
 import Park from './../pages/Park';
 import Settings from "../pages/Settings";
 import Manage from './../pages/Manage/Manage';
+import Report from "../pages/Report";
 
 
 const Login = lazy(() => import("../pages/Login"));
@@ -89,6 +90,17 @@ const AppRoutes = () => {
             </ProtectedRoute>
           }
         />
+         <Route
+          path="/reports"
+          element={
+            <ProtectedRoute>
+              <MainLayout>
+                <Report/>
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        
          <Route
           path="/settings"
           element={

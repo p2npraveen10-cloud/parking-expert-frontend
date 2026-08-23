@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import {
-  ParkingCircle,
   Bell,
   ChevronDown,
   LogOut,
@@ -12,6 +11,8 @@ import {
   FileText,
   X,
 } from "lucide-react";
+
+import logo from "../assets/logo.png";
 
 const API_BASE_URL =
   process.env.REACT_APP_API_BASE_URL || "http://localhost:8080/api";
@@ -167,26 +168,26 @@ const Header = ({ onLogout }) => {
       >
         <div className="h-[68px] flex items-center gap-4 px-4 md:px-6">
           {/* Left: brand */}
-          <div className="flex items-center gap-3 shrink-0">
-            <motion.div
-              whileHover={{ scale: 1.06, rotate: -4 }}
-              transition={{ type: "spring", stiffness: 300, damping: 12 }}
-              className="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0"
-              style={{
-                background: "linear-gradient(135deg, #06B6D4, #2563EB)",
-                boxShadow: "0 4px 14px rgba(37,99,235,0.35)",
-              }}
-            >
-              <ParkingCircle size={22} strokeWidth={2.2} />
-            </motion.div>
+        <div className="flex items-center gap-3 shrink-0">
+  <motion.div
+    whileHover={{ scale: 1.06 }}
+    transition={{ type: "spring", stiffness: 300, damping: 12 }}
+    className="w-10 h-10 rounded-xl overflow-hidden shrink-0"
+  >
+    <img
+      src={logo}
+      alt="Parking Expert"
+      className="w-full h-full object-contain"
+    />
+  </motion.div>
 
-            <div className="hidden sm:block leading-tight">
-              <h1 className="text-base font-bold text-slate-800 tracking-tight">
-                Parking Expert
-              </h1>
-              <p className="text-[11px] text-slate-400">Facility Admin</p>
-            </div>
-          </div>
+  <div className="hidden sm:block leading-tight">
+    <h1 className="text-base font-bold text-slate-800 tracking-tight">
+      Parking Expert
+    </h1>
+    <p className="text-[11px] text-slate-400">Facility Admin</p>
+  </div>
+</div>
 
           <div className="flex-1" />
 

@@ -41,14 +41,17 @@ export const PlateBadge = ({ value, size = "md" }) => {
 };
 
 export const StatusPill = ({ status }) => {
-  const isPaid = status === "PAID";
+  const isGreen = status === "PAID" || status === "ENABLED" || status === "ACTIVE";
+
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-        isPaid ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+        isGreen
+          ? "bg-emerald-50 text-emerald-600"
+          : "bg-amber-50 text-amber-600"
       }`}
     >
-      {isPaid ? "Paid" : "Pending"}
+      {status}
     </span>
   );
 };

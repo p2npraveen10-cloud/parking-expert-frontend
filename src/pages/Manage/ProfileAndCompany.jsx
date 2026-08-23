@@ -14,6 +14,8 @@ import {
   getCompanyDetails,
   updateCompanyDetails,
   getCompanyAttachments,
+  deleteCompanyAttachment,
+  uploadCompanyAttachment,
   exportCompanyJson,
   exportCompanyCsv,
   exportCompanyExcel,
@@ -593,6 +595,15 @@ const CompanyTab = () => {
   const [importGuideOpen, setImportGuideOpen] = useState(false);
   const importGuideRef = useRef(null);
 
+  const [deletingAttachmentId, setDeletingAttachmentId] = useState(null);
+  const [attachmentDeleteConfirmId, setAttachmentDeleteConfirmId] = useState(null);
+
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadFileType, setUploadFileType] = useState("");
+  const [uploadDescription, setUploadDescription] = useState("");
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+
   useEffect(() => {
     if (!importGuideOpen) return;
     const handleClickOutside = (e) => {
@@ -604,13 +615,11 @@ const CompanyTab = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [importGuideOpen]);
 
-  // --- logo upload state (moved here from ProfileTab) ---
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef(null);
 
-  // --- dedicated attachments state (from /company/attachments) ---
   const [attachments, setAttachments] = useState(null);
   const [attachmentsLoading, setAttachmentsLoading] = useState(false);
 
@@ -673,15 +682,26 @@ const CompanyTab = () => {
     loadCompany({ type: "", silent: false });
   }, [loadCompany]);
 
-  /** GET /company/attachments?contentType=... */
   const loadAttachments = useCallback(async (type = "", { silent = false } = {}) => {
     if (silent) setFiltering(true);
     else setAttachmentsLoading(true);
     try {
-      const params = type ? { contentType: type } : undefined;
+      const normalized = (type || "").trim().toLowerCase();
+      const supported = ["pdf", "excel", "image", "json", "csv"];
+      const params =
+        normalized && supported.includes(normalized)
+          ? { contentType: normalized }
+          : undefined;
       const { data } = await getCompanyAttachments(params);
       const payload = data?.data ?? data ?? [];
-      const list = Array.isArray(payload) ? payload : payload?.attachments || [];
+      let list = Array.isArray(payload) ? payload : payload?.attachments || [];
+      if (normalized && !supported.includes(normalized) && normalized !== "all") {
+        list = list.filter(
+          (f) =>
+            String(f.fileType || "").toLowerCase() === normalized ||
+            String(f.contentType || "").toLowerCase().includes(normalized)
+        );
+      }
       setAttachments(list);
     } catch (err) {
       const message =
@@ -699,8 +719,60 @@ const CompanyTab = () => {
   useEffect(() => {
     if (section !== "attachments") return;
     loadAttachments(contentType);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [section]);
+
+  const handleUploadAttachment = async (e) => {
+    e.preventDefault();
+    if (!uploadFile) {
+      toast?.error("No file selected", "Please choose a file to upload.");
+      return;
+    }
+
+    setUploadingAttachment(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", uploadFile);
+      if (uploadFileType) {
+        formData.append("fileType", String(uploadFileType).trim().toUpperCase());
+      }
+      if (uploadDescription?.trim()) {
+        formData.append("description", uploadDescription.trim());
+      }
+
+      await uploadCompanyAttachment(formData);
+
+      toast?.success("Attachment uploaded", "The file was added successfully.");
+      setUploadModalOpen(false);
+      setUploadFile(null);
+      setUploadFileType("");
+      setUploadDescription("");
+      await loadAttachments(contentType, { silent: true });
+    } catch (err) {
+      toast?.error(
+        "Upload failed",
+        err?.response?.data?.message || err?.message || "Couldn't upload this file."
+      );
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
+  const handleDeleteAttachment = async (id) => {
+    setDeletingAttachmentId(id);
+    try {
+      await deleteCompanyAttachment(id);
+      setAttachments((prev) => (prev || []).filter((f) => f.id !== id));
+      toast?.success("Attachment deleted", "The file was removed successfully.");
+    } catch (err) {
+      toast?.error(
+        "Delete failed",
+        err?.response?.data?.message || err?.message || "Couldn't delete this attachment."
+      );
+    } finally {
+      setDeletingAttachmentId(null);
+      setAttachmentDeleteConfirmId(null);
+    }
+  };
 
   const loadSchedules = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setScheduleLoading(true);
@@ -1019,8 +1091,20 @@ const CompanyTab = () => {
     { id: "reportScheduling", label: "Report scheduling", icon: Send },
   ];
 
-  const fileIcon = (type) => (type === "PDF" ? FileText : type === "EXCEL" ? FileSpreadsheet : FileIcon);
-  const fileTone = (type) => (type === "PDF" ? "#E23744" : type === "EXCEL" ? "#1D7A46" : TOKENS.blue);
+  const fileIcon = (type) => {
+    const t = String(type || "").toUpperCase();
+    if (t === "PDF") return FileText;
+    if (t === "EXCEL") return FileSpreadsheet;
+    return FileIcon;
+  };
+  const fileTone = (type) => {
+    const t = String(type || "").toUpperCase();
+    if (t === "PDF") return "#E23744";
+    if (t === "EXCEL") return "#1D7A46";
+    if (t === "IMAGE") return TOKENS.cyan;
+    if (t === "AUDIO") return TOKENS.indigo;
+    return TOKENS.blue;
+  };
   const formatBytes = (n) => {
     if (!n && n !== 0) return "—";
     if (n < 1024) return `${n} B`;
@@ -1050,7 +1134,7 @@ const CompanyTab = () => {
         }
         .pe3d-shine:hover::after { opacity: 1; animation: pe3dShimmer 1s ease; }
         .pe3d-card { transition: transform .35s ease, box-shadow .35s ease; transform-style: preserve-3d; }
-        .pe3d-card:hover { transform: translateY(-4px) rotateX(2deg) rotateY(-2deg); }
+        .pe3d-card:hover {  box-shadow: 0 16px 34px -18px rgba(15,23,42,0.4);}
         .pe3d-clock { filter: drop-shadow(0 14px 20px rgba(30, 41, 59, 0.28)); }
         @media (prefers-reduced-motion: reduce) {
           .pe3d-float, .pe3d-ring, .pe3d-shine::after { animation: none !important; }
@@ -1264,26 +1348,36 @@ const CompanyTab = () => {
                 <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: TOKENS.inkSoft }}>
                   Filter by content type
                 </p>
-                <div className="flex items-center gap-1 rounded-xl border bg-[#F8F9FC] p-1" style={{ borderColor: TOKENS.line }}>
-                  {CONTENT_TYPE_OPTIONS.map((o) => {
-                    const active = contentType === o.value;
-                    return (
-                      <button
-                        key={o.value || "all"}
-                        type="button"
-                        onClick={() => handleContentTypeChange(o.value)}
-                        disabled={filtering}
-                        className="rounded-lg px-2.5 py-1.5 text-[11.5px] font-bold transition disabled:opacity-60"
-                        style={{
-                          fontFamily: FONT_BODY,
-                          color: active ? "#fff" : TOKENS.inkSoft,
-                          background: active ? `linear-gradient(135deg, ${TOKENS.blue}, ${TOKENS.cyan})` : "transparent",
-                        }}
-                      >
-                        {o.label}
-                      </button>
-                    );
-                  })}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1 rounded-xl border bg-[#F8F9FC] p-1" style={{ borderColor: TOKENS.line }}>
+                    {CONTENT_TYPE_OPTIONS.map((o) => {
+                      const active = contentType === o.value;
+                      return (
+                        <button
+                          key={o.value || "all"}
+                          type="button"
+                          onClick={() => handleContentTypeChange(o.value)}
+                          disabled={filtering}
+                          className="rounded-lg px-2.5 py-1.5 text-[11.5px] font-bold transition disabled:opacity-60"
+                          style={{
+                            fontFamily: FONT_BODY,
+                            color: active ? "#fff" : TOKENS.inkSoft,
+                            background: active ? `linear-gradient(135deg, ${TOKENS.blue}, ${TOKENS.cyan})` : "transparent",
+                          }}
+                        >
+                          {o.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <RippleButton
+                    type="button"
+                    onClick={() => setUploadModalOpen(true)}
+                    className="pe3d-shine"
+                    style={{ background: `linear-gradient(135deg, ${TOKENS.indigo}, ${TOKENS.blue})`, boxShadow: `0 10px 22px -10px color-mix(in srgb, ${TOKENS.blue} 55%, transparent)` }}
+                  >
+                    <Plus size={14} /> Upload attachment
+                  </RippleButton>
                 </div>
               </div>
 
@@ -1310,25 +1404,232 @@ const CompanyTab = () => {
                   {attachments.map((file) => {
                     const Icon = fileIcon(file.fileType);
                     const tone = fileTone(file.fileType);
+                    const confirming = attachmentDeleteConfirmId === file.id;
+                    const isDeleting = deletingAttachmentId === file.id;
+                    const name = file.fileName || file.name || "Untitled";
+                    const url = file.fileUrl || file.url || "#";
+
                     return (
-                      <div key={file.id} className="pe3d-card flex items-center gap-3 rounded-2xl border p-4 hover:shadow-[0_16px_34px_-18px_rgba(15,23,42,0.4)]" style={{ borderColor: TOKENS.line }}>
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl" style={{ background: `color-mix(in srgb, ${tone} 14%, white)`, color: tone }}>
-                          <Icon size={18} />
+                      <div
+                        key={file.id ?? name}
+                        className="pe3d-card flex flex-col gap-3 rounded-2xl border p-4 hover:shadow-[0_16px_34px_-18px_rgba(15,23,42,0.4)]"
+                        style={{ borderColor: TOKENS.line }}
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div
+                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                            style={{ background: `color-mix(in srgb, ${tone} 14%, white)`, color: tone }}
+                          >
+                            <Icon size={18} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13px] font-bold" style={{ color: TOKENS.ink }} title={name}>
+                              {name}
+                            </p>
+                            <p className="mt-0.5 truncate text-[11px]" style={{ color: TOKENS.inkSoft }}>
+                              {formatBytes(file.fileSize)}
+                              {file.fileType ? ` · ${file.fileType}` : ""}
+                              {" · "}
+                              {formatMemberSince(file.createdAt)}
+                            </p>
+                            {file.description ? (
+                              <p className="mt-0.5 truncate text-[10.5px]" style={{ color: TOKENS.inkSoft }}>
+                                {file.description}
+                              </p>
+                            ) : null}
+                          </div>
+                          {!confirming && (
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex h-9 w-9 items-center justify-center rounded-xl border transition hover:scale-105 active:scale-95"
+                                style={{ borderColor: TOKENS.line, color: TOKENS.blue }}
+                                title="Download"
+                              >
+                                <Download size={15} />
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => setAttachmentDeleteConfirmId(file.id)}
+                                className="flex h-9 w-9 items-center justify-center rounded-xl border transition hover:scale-105 active:scale-95"
+                                style={{ borderColor: TOKENS.line, color: "#EF4444" }}
+                                title="Delete attachment"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[13px] font-bold" style={{ color: TOKENS.ink }}>{file.fileName}</p>
-                          <p className="mt-0.5 text-[11px]" style={{ color: TOKENS.inkSoft }}>{formatBytes(file.fileSize)} · {formatMemberSince(file.createdAt)}</p>
-                        </div>
-                        <a href={file.fileUrl} target="_blank" rel="noreferrer" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition hover:scale-105 active:scale-95" style={{ borderColor: TOKENS.line, color: TOKENS.blue }} title="Download">
-                          <Download size={15} />
-                        </a>
+
+                        {confirming && (
+                          <div
+                            className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2"
+                            style={{ borderColor: "#FCA5A5", background: "color-mix(in srgb, #EF4444 6%, white)" }}
+                          >
+                            <p className="text-[11px] font-semibold" style={{ color: "#B91C1C" }}>
+                              Delete this file?
+                            </p>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setAttachmentDeleteConfirmId(null)}
+                                disabled={isDeleting}
+                                className="rounded-lg px-2.5 py-1 text-[11px] font-bold"
+                                style={{ color: TOKENS.inkSoft, border: `1px solid ${TOKENS.line}`, background: "white" }}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAttachment(file.id)}
+                                disabled={isDeleting}
+                                className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold text-white"
+                                style={{ background: "#EF4444" }}
+                              >
+                                {isDeleting ? <Loader2 size={12} className="pe-refresh-spin" /> : <Trash2 size={12} />}
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
               )}
             </div>
+            
           )}
+          <Modal
+            open={uploadModalOpen}
+            onClose={() => {
+              if (uploadingAttachment) return;
+              setUploadModalOpen(false);
+              setUploadFile(null);
+              setUploadFileType("");
+              setUploadDescription("");
+            }}
+            width={520}
+          >
+            <form onSubmit={handleUploadAttachment}>
+              <div
+                className="relative overflow-hidden px-6 pb-5 pt-6"
+                style={{ background: `linear-gradient(140deg, ${TOKENS.indigo} 0%, ${TOKENS.blue} 50%, ${TOKENS.cyan} 140%)` }}
+              >
+                <div className="pointer-events-none absolute -right-10 -top-14 h-44 w-44 rounded-full bg-white/10 blur-3xl" />
+                <div className="relative flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 text-white ring-1 ring-white/25 backdrop-blur">
+                      <FileUp size={18} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/70">Attachments</p>
+                      <p className="text-[16px] font-extrabold text-white" style={{ fontFamily: FONT_DISPLAY }}>
+                        Upload attachment
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (uploadingAttachment) return;
+                      setUploadModalOpen(false);
+                      setUploadFile(null);
+                      setUploadFileType("");
+                      setUploadDescription("");
+                    }}
+                    className="pe-focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/80 transition hover:bg-white/15 hover:text-white"
+                    aria-label="Close"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-5">
+                <div className="space-y-3.5">
+                  <FieldShell label="File type" icon={FileText}>
+                    <Dropdown
+                      value={uploadFileType}
+                      onChange={(v) => setUploadFileType(v)}
+                      width="100%"
+                      options={[
+                        { value: "IMAGE", label: "Image" },
+                        { value: "PDF", label: "PDF" },
+                        { value: "EXCEL", label: "Excel" },
+                        { value: "AUDIO", label: "Audio" },
+                        { value: "OTHER", label: "Other" },
+                      ]}
+                    />
+                  </FieldShell>
+
+                  <FieldShell label="Description" icon={FileText}>
+                    <input
+                      className={glossyInputClass}
+                      style={glossyInputStyle}
+                      value={uploadDescription}
+                      onChange={(e) => setUploadDescription(e.target.value)}
+                      placeholder="Optional description"
+                    />
+                  </FieldShell>
+
+                  <div>
+                    <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wide" style={{ color: TOKENS.inkSoft }}>
+                      File
+                    </p>
+                    <label
+                      className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed py-8 text-center transition hover:bg-slate-50"
+                      style={{ borderColor: TOKENS.line }}
+                    >
+                      <FileUp size={20} style={{ color: TOKENS.blue }} />
+                      <span className="text-[12px] font-semibold" style={{ color: TOKENS.ink }}>
+                        {uploadFile ? uploadFile.name : "Click to choose a file"}
+                      </span>
+                      <span className="text-[10.5px]" style={{ color: TOKENS.inkSoft }}>
+                        PDF, Excel, audio, image, other
+                      </span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t px-5 py-4" style={{ borderColor: TOKENS.line }}>
+                <RippleButton
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    if (uploadingAttachment) return;
+                    setUploadModalOpen(false);
+                    setUploadFile(null);
+                    setUploadFileType("");
+                    setUploadDescription("");
+                  }}
+                  disabled={uploadingAttachment}
+                >
+                  Cancel
+                </RippleButton>
+                <RippleButton
+                  type="submit"
+                  disabled={uploadingAttachment || !uploadFile}
+                  className="pe3d-shine"
+                  style={{
+                    background: `linear-gradient(135deg, ${TOKENS.indigo}, ${TOKENS.blue})`,
+                    boxShadow: `0 12px 26px -10px color-mix(in srgb, ${TOKENS.blue} 60%, transparent)`,
+                  }}
+                >
+                  {uploadingAttachment ? <Loader2 size={13} className="pe-refresh-spin" /> : <FileUp size={13} />}
+                  {uploadingAttachment ? "Uploading…" : "Upload"}
+                </RippleButton>
+              </div>
+            </form>
+          </Modal>
 
           {section === "importExport" && (
             <div className="p-5">
