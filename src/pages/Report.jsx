@@ -1023,7 +1023,7 @@ const RangeReportView = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const dailySummaries = data?.dailySummaries ?? [];
+  const dailySummaries = useMemo(() => data?.dailySummaries ?? [], [data]);
   const vehicles = data?.vehicles ?? [];
 
   const totals = dailySummaries.reduce(
