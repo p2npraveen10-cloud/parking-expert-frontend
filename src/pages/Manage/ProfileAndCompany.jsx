@@ -719,7 +719,7 @@ const CompanyTab = () => {
   useEffect(() => {
     if (section !== "attachments") return;
     loadAttachments(contentType);
-  }, [section]);
+  }, [section,contentType]);
 
   const handleUploadAttachment = async (e) => {
     e.preventDefault();
