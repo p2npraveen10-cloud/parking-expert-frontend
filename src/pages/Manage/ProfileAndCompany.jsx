@@ -1362,7 +1362,7 @@ const CompanyTab = () => {
         </div>
 
         {/* Error */}
-        {/* {createError && (
+        {createError && (
           <div
             className="mb-5 flex items-start gap-2.5 rounded-2xl px-4 py-3 text-[12.5px] font-medium"
             style={{
@@ -1374,7 +1374,7 @@ const CompanyTab = () => {
             <span className="mt-0.5 shrink-0 text-[14px]">⚠</span>
             <span>{createError}</span>
           </div>
-        )} */}
+        )}
 
         {/* Fields */}
         <div className="grid grid-cols-2 gap-x-4 gap-y-4">
