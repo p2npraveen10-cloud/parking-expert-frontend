@@ -1,5 +1,5 @@
-import React, { useState, useRef, useCallback, useLayoutEffect, useEffect } from "react";
-import { User, Building2, Car, Users as UsersIcon, Ticket } from "lucide-react";
+import { useState, useRef, useCallback, useLayoutEffect, useEffect } from "react";
+import { User, Building2, Car, Users as UsersIcon } from "lucide-react";
 
 import { GlobalStyle, TOKENS, FONT_DISPLAY, FONT_BODY, ComingSoon } from "./manageShared";
 import { ProfileTab, CompanyTab } from "./ProfileAndCompany";
@@ -13,6 +13,14 @@ const UsersTab = () => (
     eta="est. next release"
   />
 );
+const readStoredUser = () => {
+  try {
+    const raw = localStorage.getItem("user");
+    return raw ? JSON.parse(raw) : {};
+  } catch (_) {
+    return {};
+  }
+};
 
 const TABS = [
   { id: "profile", label: "Profile", icon: User, component: ProfileTab },
@@ -22,14 +30,28 @@ const TABS = [
 ];
 
 export default function Manage() {
-const [tab, setTab] = useState(() => {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const t = params.get("tab");
-    if (t && ["profile", "company", "vehicles", "users"].includes(t)) return t;
-  } catch (_) {}
-  return "vehicles";
-});
+  const [user, setUser] = useState(readStoredUser);
+
+  const [tab, setTab] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const t = params.get("tab");
+      if (t && ["profile", "company", "vehicles", "users"].includes(t)) return t;
+    } catch (_) { }
+    return "vehicles";
+  });
+  useEffect(() => {
+    const syncUser = () => setUser(readStoredUser());
+
+    window.addEventListener("user-profile-updated", syncUser);
+    window.addEventListener("storage", syncUser);
+
+    return () => {
+      window.removeEventListener("user-profile-updated", syncUser);
+      window.removeEventListener("storage", syncUser);
+    };
+  }, []);
+
   const tabRefs = useRef({});
   const [indicator, setIndicator] = useState({ left: 0, width: 0 });
 
@@ -57,15 +79,22 @@ const [tab, setTab] = useState(() => {
         <div className="mx-auto max-w-6xl px-6 py-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div
-                className="flex h-11 w-11 items-center justify-center rounded-2xl text-white"
-                style={{
-                  background: `linear-gradient(135deg, ${TOKENS.blue}, ${TOKENS.indigo})`,
-                  boxShadow: "0 8px 18px -8px rgba(37,84,235,0.5)",
-                }}
-              >
-                <Ticket size={19} />
+              {/* <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-white shadow-md ring-1 ring-slate-200">
+  <img
+    src={user.companyLogo}
+    alt={user.companyName}
+    className="h-full w-full object-cover"
+  />
+</div> */}
+
+              <div className="group flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200 transition-all duration-200 hover:shadow-md hover:ring-blue-200">
+                <img
+                  src={user.companyLogo}
+                  alt={user.companyName}
+                  className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                />
               </div>
+
               <div>
                 <p className="text-[10.5px] font-bold uppercase tracking-[0.16em]" style={{ color: TOKENS.blue }}>
                   ParkEase Console
@@ -108,9 +137,8 @@ const [tab, setTab] = useState(() => {
                   key={t.id}
                   ref={(el) => (tabRefs.current[t.id] = el)}
                   onClick={() => setTab(t.id)}
-                  className={`pe-tab-btn relative z-10 flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12.5px] font-bold ${
-                    active ? "text-white" : "text-slate-500 hover:text-slate-700"
-                  }`}
+                  className={`pe-tab-btn relative z-10 flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12.5px] font-bold ${active ? "text-white" : "text-slate-500 hover:text-slate-700"
+                    }`}
                   style={{ fontFamily: FONT_BODY }}
                 >
                   <Icon size={13} />

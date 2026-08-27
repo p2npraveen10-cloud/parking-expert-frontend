@@ -2,6 +2,14 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 
+/**
+ * A user (from localStorage "user") is considered "company onboarded"
+ * once a companyName is present. Google OAuth first-time users are
+ * created with no company info, so this evaluates to false for them
+ * until they complete /manage → Company tab.
+ */
+export const isCompanyOnboarded = (user) => Boolean(user?.companyName?.trim());
+
 export const inputClass =
   "w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all duration-200 focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-100";
 

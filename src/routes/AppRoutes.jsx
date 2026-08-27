@@ -26,10 +26,16 @@ const AppRoutes = () => {
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
-        {/* <Route path="/" element={<Navigate to="/login" replace />} /> */}
-          <Route path="/" element={<LandingPage />} />
+        <Route
+          path="/"
+          element={
+            <PublicRoute>
+              <LandingPage />
+            </PublicRoute>
+          }
+        />
 
-        {/* Public-only — bounce to /dashboard if already logged in */}
+
         <Route
           path="/login"
           element={
@@ -55,8 +61,6 @@ const AppRoutes = () => {
           }
         />
 
-        {/* Google OAuth redirect target — not wrapped in PublicRoute since
-            it needs to run even mid-login, before a token exists yet */}
         <Route path="/oauth-success" element={<OAuthSuccess />} />
 
         {/* Protected — require a token */}
@@ -70,43 +74,43 @@ const AppRoutes = () => {
             </ProtectedRoute>
           }
         />
-         <Route
+        <Route
           path="/manage"
           element={
             <ProtectedRoute>
               <MainLayout>
-                <Manage/>
+                <Manage />
               </MainLayout>
             </ProtectedRoute>
           }
         />
-         <Route
+        <Route
           path="/parking"
           element={
             <ProtectedRoute>
               <MainLayout>
-                <Park/>
+                <Park />
               </MainLayout>
             </ProtectedRoute>
           }
         />
-         <Route
+        <Route
           path="/reports"
           element={
             <ProtectedRoute>
               <MainLayout>
-                <Report/>
+                <Report />
               </MainLayout>
             </ProtectedRoute>
           }
         />
-        
-         <Route
+
+        <Route
           path="/settings"
           element={
             <ProtectedRoute>
               <MainLayout>
-                <Settings/>
+                <Settings />
               </MainLayout>
             </ProtectedRoute>
           }

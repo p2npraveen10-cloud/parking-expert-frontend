@@ -109,6 +109,18 @@ export const getCompanyDetails = (params) =>
     withCredentials: true,
   });
 
+/**
+ * POST /api/v1/company — creates the company for the current user.
+ * Used the first time a user (typically a Google OAuth sign-in) has
+ * no company on file yet.
+ * @param {{ companyName: string, companyDescription: string, companyAddress: string,
+ *            companyEmail: string, companyContactNo: string, gstNumber: string }} data
+ */
+export const createCompany = (data) =>
+  api.post(`company`, data, {
+    withCredentials: true,
+  });
+
 export const updateCompanyDetails = (data) =>
   api.put(`company/update`, data, {
     withCredentials: true,

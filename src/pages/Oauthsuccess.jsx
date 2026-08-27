@@ -43,18 +43,44 @@ const OAuthSuccess = ({ onLoginSuccess }) => {
         }
 
 
+        // A first-time Google user can be authenticated without having a
+        // company yet. Keep that state explicit instead of making the UI
+        // guess from undefined company fields.
+        const hasCompany = Boolean(
+          companyName ||
+          companyEmail ||
+          companyContactNo ||
+          gstNumber ||
+          companyLogo
+        );
+
         const user = {
           firstName,
           lastName,
-          emailId: email,   // normal login oda same format
+          emailId: email,
           contactNo,
           dateOfBirth,
           profile,
-          companyName,
-          companyEmail,
-          companyContactNo,
-          gstNumber,
-          companyLogo,
+
+          // null means the authenticated user has no company yet.
+          company: hasCompany
+            ? {
+                companyName: companyName || null,
+                companyEmail: companyEmail || null,
+                companyContactNo: companyContactNo || null,
+                gstNumber: gstNumber || null,
+                companyLogo: companyLogo || null,
+              }
+            : null,
+
+          companyName: companyName || null,
+          companyEmail: companyEmail || null,
+          companyContactNo: companyContactNo || null,
+          gstNumber: gstNumber || null,
+          companyLogo: companyLogo || null,
+
+          // Useful for UI/debugging; it does not control authorization.
+          authProvider: "GOOGLE",
         };
         // Save token
         localStorage.setItem("token", accessToken);

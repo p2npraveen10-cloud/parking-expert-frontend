@@ -12,6 +12,7 @@ import {
   getUserProfile,
   updateUserProfile,
   getCompanyDetails,
+  createCompany,
   updateCompanyDetails,
   getCompanyAttachments,
   deleteCompanyAttachment,
@@ -51,9 +52,6 @@ import {
   pad2,
 } from "./manageShared";
 
-/* ------------------------------------------------------------------ */
-/* ProfileTab                                                          */
-/* ------------------------------------------------------------------ */
 const ProfileTab = () => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -62,19 +60,13 @@ const ProfileTab = () => {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(null);
 
-  // --- avatar upload state ---
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef(null);
 
-
   const toast = useToast();
 
-
-
-
-  /** Keep headbar (Header.jsx) in sync with the latest profile */
   const syncHeaderUser = useCallback((p) => {
     if (!p) return;
     try {
@@ -96,9 +88,7 @@ const ProfileTab = () => {
       };
       localStorage.setItem("user", JSON.stringify(next));
       window.dispatchEvent(new Event("user-profile-updated"));
-    } catch (_) {
-      /* ignore */
-    }
+    } catch (_) {}
   }, []);
 
   const loadProfile = useCallback(async () => {
@@ -183,7 +173,6 @@ const ProfileTab = () => {
 
       await updateUserProfile(form);
 
-      // Update headbar immediately
       syncHeaderUser({
         ...profile,
         ...form,
@@ -492,9 +481,6 @@ const ProfileTab = () => {
   );
 };
 
-/* ------------------------------------------------------------------ */
-/* Schedule helpers                                                    */
-/* ------------------------------------------------------------------ */
 const ScheduleToggle = ({ checked, onChange, disabled }) => (
   <button
     type="button"
@@ -574,9 +560,6 @@ const ScheduleClock = ({ hour, minute }) => {
   );
 };
 
-/* ------------------------------------------------------------------ */
-/* CompanyTab                                                          */
-/* ------------------------------------------------------------------ */
 const CompanyTab = () => {
   const [company, setCompany] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -586,6 +569,17 @@ const CompanyTab = () => {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(null);
   const [section, setSection] = useState("details");
+  const [companyMissing, setCompanyMissing] = useState(null);
+  const [createForm, setCreateForm] = useState({
+    companyName: "",
+    companyDescription: "",
+    companyAddress: "",
+    companyEmail: "",
+    companyContactNo: "",
+    gstNumber: "",
+  });
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(null);
@@ -632,7 +626,6 @@ const CompanyTab = () => {
   const [togglingScheduleId, setTogglingScheduleId] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
-
   const [scheduleForm, setScheduleForm] = useState({
     frequency: "DAILY",
     hourOfDay: 9,
@@ -656,27 +649,238 @@ const CompanyTab = () => {
   });
 
   const loadCompany = useCallback(async ({ type = "", silent = false } = {}) => {
-    if (silent) setFiltering(true);
-    else {
+    if (silent) {
+      setFiltering(true);
+    } else {
       setLoading(true);
       setError(null);
     }
+
     try {
+      /*
+       * IMPORTANT COMPANY FLOW
+       * ----------------------
+       * Do NOT call getCompanyDetails() first.
+       *
+       * The logged-in user may legitimately have no company yet
+       * (especially a first-time Google OAuth user). In that state the
+       * company endpoint can return 404/throw "Company not found".
+       * That is not a page error; it means we must show Create Company.
+       *
+       * Therefore we first read the authenticated user's profile and
+       * determine whether the user is already attached to a company.
+       * Only when a company exists do we call getCompanyDetails().
+       */
+      const profileResponse = await getUserProfile();
+      const profilePayload = profileResponse?.data?.data ?? profileResponse?.data ?? null;
+
+      console.log("[CompanyTab] Logged-in profile:", profilePayload);
+
+      if (!profilePayload) {
+        throw new Error("Unable to load the logged-in user profile.");
+      }
+
+      // The API may expose the relationship as `company`, or in some
+      // projects as companyId/companyName. Support all of those shapes.
+      const profileCompany = profilePayload.company;
+      const profileCompanyId =
+        profilePayload.companyId ??
+        profilePayload.companyID ??
+        profilePayload.company?.id ??
+        profilePayload.company?.companyId;
+      const profileCompanyName =
+        profilePayload.companyName ??
+        (typeof profileCompany === "string" ? profileCompany : profileCompany?.companyName);
+
+      const hasCompany =
+        (profileCompany &&
+          (typeof profileCompany !== "object" || Object.keys(profileCompany).length > 0)) ||
+        profileCompanyId != null ||
+        Boolean(String(profileCompanyName || "").trim());
+
+      // ------------------------------------------------------------
+      // NO COMPANY: this is an expected state, not an API error.
+      // Do NOT call getCompanyDetails().
+      // ------------------------------------------------------------
+      if (!hasCompany) {
+        console.log("[CompanyTab] No company assigned -> showing Create Company UI");
+
+        setCompany(null);
+        setCompanyMissing(true);
+        setError(null);
+
+        // Pre-fill the company email from the logged-in user's email.
+        // The user can still edit it before creating the company.
+        if (profilePayload.emailId || profilePayload.email) {
+          setCreateForm((prev) => ({
+            ...prev,
+            companyEmail:
+              prev.companyEmail || profilePayload.emailId || profilePayload.email || "",
+          }));
+        }
+
+        return;
+      }
+
+      // ------------------------------------------------------------
+      // COMPANY EXISTS: now load the actual company record.
+      // ------------------------------------------------------------
+      console.log("[CompanyTab] Company exists -> loading company details");
+
       const params = type ? { contentType: type } : undefined;
       const { data } = await getCompanyDetails(params);
-      setCompany(data?.data ?? data);
+
+      let companyPayload = data?.data ?? data ?? null;
+
+      if (
+        companyPayload &&
+        typeof companyPayload === "object" &&
+        companyPayload.company &&
+        typeof companyPayload.company === "object" &&
+        !companyPayload.companyName &&
+        !companyPayload.id &&
+        !companyPayload.companyId
+      ) {
+        companyPayload = companyPayload.company;
+      }
+
+      const validCompany =
+        companyPayload &&
+        typeof companyPayload === "object" &&
+        (
+          companyPayload.id != null ||
+          companyPayload.companyId != null ||
+          Boolean(String(companyPayload.companyName || "").trim()) ||
+          Boolean(String(companyPayload.companyEmail || "").trim())
+        );
+
+      if (!validCompany) {
+        // The user profile says a company exists, but the details endpoint
+        // did not return a usable company. Treat it as missing so the user
+        // can recover instead of showing a generic error screen.
+        console.warn("[CompanyTab] Company relationship exists but details are empty:", data);
+        setCompany(null);
+        setCompanyMissing(true);
+        setError(null);
+        return;
+      }
+
+      setCompany(companyPayload);
+      setCompanyMissing(false);
+      setError(null);
     } catch (err) {
+      const status = err?.response?.status;
+      const responseData = err?.response?.data;
+      const apiMessage =
+        responseData?.message ||
+        responseData?.error ||
+        (typeof responseData === "string" ? responseData : "") ||
+        "";
+
+      // Axios/Spring errors can put the message in err.message instead of
+      // response.data.message, so inspect both.
+      const combinedMessage = `${apiMessage} ${err?.message || ""}`.trim();
+
+      const isMissingCompany =
+        status === 404 ||
+        status === 204 ||
+        /company\s*(not\s*found|does\s*not\s*exist|missing|no\s*company)/i.test(
+          combinedMessage
+        );
+
+      if (isMissingCompany) {
+        console.log("[CompanyTab] Company missing -> showing Create Company UI");
+        setCompany(null);
+        setCompanyMissing(true);
+        setError(null);
+        return;
+      }
+
       const message =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Couldn't load company details.";
-      if (!silent) setError(message);
-      else toast?.error("Filter failed", message);
+        apiMessage || err?.message || "Couldn't load your company information.";
+
+      setCompany(null);
+      setCompanyMissing(false);
+      setError(message);
+
+      if (silent) {
+        toast?.error("Company load failed", message);
+      }
     } finally {
       setLoading(false);
       setFiltering(false);
     }
   }, [toast]);
+
+  const setCreateField = (key) => (e) =>
+    setCreateForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const handleCreateCompany = async (e) => {
+    e.preventDefault();
+    setCreateError("");
+
+    if (!createForm.companyName.trim()) {
+      setCreateError("Company name is required.");
+      return;
+    }
+    if (!createForm.companyEmail.trim()) {
+      setCreateError("Company email is required.");
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const { data: createRes } = await createCompany(createForm);
+      const created =
+        createRes?.data ?? createRes?.company ?? createRes ?? null;
+
+      if (logoFile) {
+        setUploadingLogo(true);
+        try {
+          const formData = new FormData();
+          formData.append("companyLogo", logoFile);
+          await uploadCompanyLogo(formData);
+        } catch (err) {
+          const message =
+            err?.response?.data?.message ||
+            err?.message ||
+            "Company was created, but the logo upload failed.";
+          toast?.error("Logo upload failed", message);
+        } finally {
+          setUploadingLogo(false);
+        }
+      }
+
+      toast?.success("Company created", "Your company details were saved.");
+      setCompanyMissing(false);
+      setCreateError("");
+      setLogoFile(null);
+      setLogoPreview(null);
+
+      // Prefer the create response so the UI updates even if GET is briefly null
+      if (
+        created &&
+        typeof created === "object" &&
+        (created.companyName || created.id || created.companyId)
+      ) {
+        setCompany(created);
+        setCompanyMissing(false);
+      }
+
+      // Re-fetch so attachments / status / owner match the server
+      await loadCompany({ type: "", silent: false });
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Couldn't create company.";
+      setCreateError(message);
+      toast?.error("Create failed", message);
+    } finally {
+      setCreating(false);
+    }
+  };
 
   useEffect(() => {
     loadCompany({ type: "", silent: false });
@@ -822,7 +1026,6 @@ const CompanyTab = () => {
       companyAddress: company.companyAddress || "",
       companyContactNo: company.companyContactNo || "",
       gstNumber: company.gstNumber || "",
-      // companyEmail intentionally omitted — not editable
     });
     setLogoFile(null);
     setLogoPreview(null);
@@ -1040,7 +1243,6 @@ const CompanyTab = () => {
     try {
       await toggleReportScheduleEnabled(id, next);
     } catch (err) {
-      // revert on failure
       setSchedules((prev) =>
         (prev || []).map((s) => ((s.id ?? s.jobKey) === id ? { ...s, enabled: !next } : s))
       );
@@ -1051,6 +1253,233 @@ const CompanyTab = () => {
   };
 
   if (loading) return <ProfileSkeleton />;
+
+  if (companyMissing === true) {
+  return (
+    <div
+      className="pe-animate-up overflow-hidden rounded-3xl border bg-white shadow-[0_20px_50px_-24px_rgba(15,23,42,0.18)]"
+      style={{ borderColor: TOKENS.line }}
+    >
+      {/* Header */}
+      <div
+        className="relative overflow-hidden px-6 py-5"
+        style={{
+          background: `linear-gradient(135deg, color-mix(in srgb, ${TOKENS.blue} 8%, white), color-mix(in srgb, ${TOKENS.cyan} 6%, white))`,
+          borderBottom: `1px solid ${TOKENS.line}`,
+        }}
+      >
+        <div className="relative z-10 flex items-start gap-3.5">
+          <div
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg"
+            style={{
+              background: `linear-gradient(135deg, ${TOKENS.blue}, ${TOKENS.cyan})`,
+              boxShadow: `0 10px 20px -8px color-mix(in srgb, ${TOKENS.blue} 55%, transparent)`,
+            }}
+          >
+            <Building2 size={18} strokeWidth={2.2} />
+          </div>
+          <div className="min-w-0 pt-0.5">
+            <p className="text-[15px] font-bold tracking-tight" style={{ color: TOKENS.ink }}>
+              Create your company
+            </p>
+            <p className="mt-1 text-[12.5px] leading-relaxed" style={{ color: TOKENS.inkSoft }}>
+              Add a few details to unlock parking management, reports, and invoicing.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <form onSubmit={handleCreateCompany} className="px-6 pb-6 pt-5">
+        {/* Logo picker */}
+        <div className="mb-6 flex items-center gap-4">
+          <div className="relative shrink-0">
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleLogoPick}
+            />
+
+            {logoPreview ? (
+              <img
+                src={logoPreview}
+                alt="Company logo preview"
+                className="h-[72px] w-[72px] rounded-2xl object-cover ring-4 ring-white"
+                style={{
+                  boxShadow: "0 12px 28px -10px rgba(15,23,42,0.28)",
+                }}
+              />
+            ) : (
+              <div
+                className="flex h-[72px] w-[72px] items-center justify-center rounded-2xl text-white"
+                style={{
+                  background: `linear-gradient(145deg, ${TOKENS.indigo}, ${TOKENS.blue})`,
+                  boxShadow: `0 12px 28px -10px color-mix(in srgb, ${TOKENS.indigo} 45%, transparent)`,
+                }}
+              >
+                <Building2 size={26} strokeWidth={1.8} />
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => logoInputRef.current?.click()}
+              disabled={uploadingLogo}
+              className="absolute -bottom-1.5 -right-1.5 flex h-8 w-8 items-center justify-center rounded-full text-white transition-all duration-200 hover:scale-110 active:scale-95 disabled:opacity-70"
+              style={{
+                background: TOKENS.blue,
+                boxShadow: "0 4px 12px -2px rgba(37,99,235,0.45)",
+                border: "3px solid white",
+              }}
+              title="Choose logo"
+            >
+              {uploadingLogo ? (
+                <Loader2 size={13} className="pe-refresh-spin" />
+              ) : (
+                <Camera size={13} strokeWidth={2.2} />
+              )}
+            </button>
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold" style={{ color: TOKENS.ink }}>
+              Company logo
+            </p>
+            <p className="mt-0.5 text-[11.5px] leading-snug" style={{ color: TOKENS.inkSoft }}>
+              Optional · PNG or JPG · max 5 MB
+            </p>
+            <button
+              type="button"
+              onClick={() => logoInputRef.current?.click()}
+              disabled={uploadingLogo}
+              className="mt-2 text-[11.5px] font-semibold transition-colors hover:underline disabled:opacity-60"
+              style={{ color: TOKENS.blue }}
+            >
+              {uploadingLogo ? "Uploading…" : "Upload image"}
+            </button>
+          </div>
+        </div>
+
+        {/* Error */}
+        {/* {createError && (
+          <div
+            className="mb-5 flex items-start gap-2.5 rounded-2xl px-4 py-3 text-[12.5px] font-medium"
+            style={{
+              background: "#FEF2F2",
+              color: "#B91C1C",
+              border: "1px solid #FECACA",
+            }}
+          >
+            <span className="mt-0.5 shrink-0 text-[14px]">⚠</span>
+            <span>{createError}</span>
+          </div>
+        )} */}
+
+        {/* Fields */}
+        <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+          <div className="col-span-2">
+            <FieldShell label="Company name" icon={Building2}>
+              <input
+                required
+                className={glossyInputClass}
+                style={glossyInputStyle}
+                value={createForm.companyName}
+                onChange={setCreateField("companyName")}
+                placeholder="Acme Parking Pvt Ltd"
+              />
+            </FieldShell>
+          </div>
+
+          <FieldShell label="Company email" icon={Mail}>
+            <input
+              required
+              type="email"
+              className={glossyInputClass}
+              style={glossyInputStyle}
+              value={createForm.companyEmail}
+              onChange={setCreateField("companyEmail")}
+              placeholder="hello@company.com"
+            />
+          </FieldShell>
+
+          <FieldShell label="Contact number" icon={Phone}>
+            <input
+              className={glossyInputClass}
+              style={glossyInputStyle}
+              value={createForm.companyContactNo}
+              onChange={setCreateField("companyContactNo")}
+              placeholder="9938205998"
+            />
+          </FieldShell>
+
+          <FieldShell label="GST number" icon={Hash}>
+            <input
+              className={glossyInputClass}
+              style={glossyInputStyle}
+              value={createForm.gstNumber}
+              onChange={setCreateField("gstNumber")}
+              placeholder="22AAAAA0000A1Z5"
+            />
+          </FieldShell>
+
+          <FieldShell label="Address" icon={MapPin}>
+            <input
+              className={glossyInputClass}
+              style={glossyInputStyle}
+              value={createForm.companyAddress}
+              onChange={setCreateField("companyAddress")}
+              placeholder="Street, City, PIN"
+            />
+          </FieldShell>
+        </div>
+
+        <div className="mt-4">
+          <FieldShell label="Description" icon={FileText}>
+            <textarea
+              rows={3}
+              className={`${glossyInputClass} resize-none`}
+              style={glossyInputStyle}
+              value={createForm.companyDescription}
+              onChange={setCreateField("companyDescription")}
+              placeholder="Briefly describe your company…"
+            />
+          </FieldShell>
+        </div>
+
+        {/* Footer action */}
+        <div
+          className="mt-6 flex items-center justify-end gap-3 border-t pt-5"
+          style={{ borderColor: TOKENS.line }}
+        >
+          <RippleButton
+            type="submit"
+            disabled={creating}
+            className="pe3d-shine min-w-[148px] justify-center gap-2 px-5 py-2.5 text-[13px] font-semibold"
+            style={{
+              background: `linear-gradient(135deg, ${TOKENS.indigo}, ${TOKENS.blue})`,
+              boxShadow: `0 14px 30px -12px color-mix(in srgb, ${TOKENS.blue} 65%, transparent)`,
+              color: "white",
+            }}
+          >
+            {creating ? (
+              <>
+                <Loader2 size={14} className="pe-refresh-spin" />
+                Creating…
+              </>
+            ) : (
+              <>
+                <Check size={14} strokeWidth={2.4} />
+                Create company
+              </>
+            )}
+          </RippleButton>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 
   if (error) {
     return (
@@ -1317,7 +1746,6 @@ const CompanyTab = () => {
                   <FieldShell label="GST number" icon={Hash}>
                     <input className={glossyInputClass} style={glossyInputStyle} value={form.gstNumber} onChange={set("gstNumber")} />
                   </FieldShell>
-                  {/* Email field intentionally removed from edit form — still shown in details view */}
                   <FieldShell label="Contact number" icon={Phone}>
                     <input className={glossyInputClass} style={glossyInputStyle} value={form.companyContactNo} onChange={set("companyContactNo")} />
                   </FieldShell>
@@ -1500,7 +1928,6 @@ const CompanyTab = () => {
                 </div>
               )}
             </div>
-            
           )}
           <Modal
             open={uploadModalOpen}
@@ -1834,7 +2261,6 @@ const CompanyTab = () => {
                           </div>
                         </div>
 
-                        {/* Action bar */}
                         {confirmingDelete ? (
                           <div
                             className="mt-3.5 flex items-center justify-between gap-2 rounded-xl border pl-1.5 pl-3 pr-2 py-2"

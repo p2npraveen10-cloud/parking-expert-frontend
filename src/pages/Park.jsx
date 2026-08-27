@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from "react-router-dom";
 import { useToast } from "../context/ToastContext";
@@ -713,6 +714,7 @@ const InfoItem = ({ label, value, icon: Icon }) => (
     <p className="text-[13px] font-semibold text-slate-800 truncate">{value}</p>
   </div>
 );
+
 const QRDialog = ({ result, onClose }) => {
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
@@ -724,14 +726,19 @@ const QRDialog = ({ result, onClose }) => {
     };
   }, [onClose]);
 
-  return (
+  // Rendered via a portal into document.body so this modal is never nested
+  // inside an ancestor with a CSS transform (e.g. the animated tab wrapper
+  // in Park). A transformed ancestor creates a new containing block for
+  // position:fixed children, which was clipping the backdrop and pushing
+  // the dialog down instead of covering the full viewport.
+  return createPortal(
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-md px-4"
+      className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-900/70 backdrop-blur-md px-4"
     >
       <motion.div
         onClick={(e) => e.stopPropagation()}
@@ -821,7 +828,8 @@ const QRDialog = ({ result, onClose }) => {
           </div>
         </div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body
   );
 };
 

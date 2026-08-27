@@ -151,7 +151,7 @@ const Header = ({ onLogout }) => {
   const showImage = Boolean(profileImage) && !imgError;
 
   const openProfilePreview = (e) => {
-    e.stopPropagation(); // don't toggle the dropdown
+    e.stopPropagation();
     if (showImage) {
       setProfilePreviewOpen(true);
       setMenuOpen(false);
@@ -168,26 +168,26 @@ const Header = ({ onLogout }) => {
       >
         <div className="h-[68px] flex items-center gap-4 px-4 md:px-6">
           {/* Left: brand */}
-        <div className="flex items-center gap-3 shrink-0">
-  <motion.div
-    whileHover={{ scale: 1.06 }}
-    transition={{ type: "spring", stiffness: 300, damping: 12 }}
-    className="w-10 h-10 rounded-xl overflow-hidden shrink-0"
-  >
-    <img
-      src={logo}
-      alt="Parking Expert"
-      className="w-full h-full object-contain"
-    />
-  </motion.div>
+          <div className="flex items-center gap-3 shrink-0">
+            <motion.div
+              whileHover={{ scale: 1.06 }}
+              transition={{ type: "spring", stiffness: 300, damping: 12 }}
+              className="w-10 h-10 rounded-xl overflow-hidden shrink-0"
+            >
+              <img
+                src={logo}
+                alt="Parking Expert"
+                className="w-full h-full object-contain"
+              />
+            </motion.div>
 
-  <div className="hidden sm:block leading-tight">
-    <h1 className="text-base font-bold text-slate-800 tracking-tight">
-      Parking Expert
-    </h1>
-    <p className="text-[11px] text-slate-400">Facility Admin</p>
-  </div>
-</div>
+            <div className="hidden sm:block leading-tight">
+              <h1 className="text-base font-bold text-slate-800 tracking-tight">
+                Parking Expert
+              </h1>
+              <p className="text-[11px] text-slate-400">Facility Admin</p>
+            </div>
+          </div>
 
           <div className="flex-1" />
 
@@ -328,18 +328,26 @@ const Header = ({ onLogout }) => {
                     />
                   ) : (
                     <div
-                      className="flex items-center justify-center rounded-full ring-2 ring-slate-200 text-[12px] font-semibold text-slate-600"
-                      style={{
-                        width: 34,
-                        height: 34,
-                        minWidth: 34,
-                        minHeight: 34,
-                        borderRadius: "50%",
-                        backgroundColor: "#E2E8F0",
-                      }}
+                      className="
+    flex h-9 w-9 min-h-9 min-w-9
+    items-center justify-center
+    rounded-full
+    bg-gradient-to-br from-blue-600 to-indigo-700
+    text-[12px] font-bold text-white
+    shadow-[0_4px_10px_rgba(37,99,235,0.30)]
+    ring-2 ring-blue-100
+    transition-all duration-200
+    hover:scale-105
+    hover:ring-blue-200
+  "
                     >
                       {initials}
                     </div>
+
+
+
+
+
                   )}
 
                   {/* Online indicator */}

@@ -36,7 +36,8 @@ import {
   getReportSchedule,
 } from "../serviceCalls/apiCall";
 
-import { StatusPill, formatDateTime } from "../components/shared";
+import { StatusPill, formatDateTime, isCompanyOnboarded } from "../components/shared";
+import CompanyOnboardingBanner from "../components/CompanyOnboardingBanner";
 
 const EMPTY_SUMMARY = {
   vehiclesParked: 0,
@@ -446,6 +447,15 @@ const Dashboard = () => {
   const [scheduleFilter, setScheduleFilter] = useState("ALL");
   const [expandedType, setExpandedType] = useState(null);
 
+  const currentUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "null");
+    } catch {
+      return null;
+    }
+  })();
+  const needsCompanyOnboarding = !isCompanyOnboarded(currentUser);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -533,6 +543,8 @@ const Dashboard = () => {
 
   return (
     <div className="w-full space-y-6">
+      {needsCompanyOnboarding && <CompanyOnboardingBanner />}
+
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
