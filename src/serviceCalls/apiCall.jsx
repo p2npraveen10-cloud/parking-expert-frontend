@@ -2,7 +2,7 @@ import api from "./api";
 
 const API_OAUTH_URL =
   process.env.REACT_APP_OAUTH_URL || "http://localhost:8080/";
-
+console.log("API BASE URL:", API_OAUTH_URL);
 
 /**
  * @param {{ email: string, password: string, rememberMe: boolean }} payload

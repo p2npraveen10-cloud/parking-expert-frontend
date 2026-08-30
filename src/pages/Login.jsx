@@ -167,11 +167,11 @@ const Login = ({ onLoginSuccess }) => {
       }
     } catch (err) {
       const message =
-        err.response?.data?.message ||
-        (err.response?.status === 401
+        err.message ||
+        (err.status === 401
           ? "Incorrect email or password"
           : "Something went wrong. Please try again.");
-
+          console.log(err);
       setApiError(message);
 
       // toast.error(
