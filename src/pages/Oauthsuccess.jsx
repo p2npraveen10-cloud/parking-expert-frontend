@@ -13,8 +13,7 @@ const OAuthSuccess = ({ onLoginSuccess }) => {
     const fetchOAuthUser = async () => {
       try {
         const response = await api.get("auth/oauth-user", {
-          withCredentials: true,
-        });
+          });
 
         console.log("OAuth Response:", response.data);
 
